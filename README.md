@@ -1,3 +1,68 @@
+<div align="center">
+  <a href="https://autooptm.com"><img src=".autooptm/logo.png" width="96" alt="AutoOptm"></a>
+
+  <h1>DINOv2 · optimized by <a href="https://autooptm.com">AutoOptm</a></h1>
+
+  <p><b>5.22x faster end to end</b> on the command below, output verified against the stock program.</p>
+
+  <p>
+    <a href="https://autooptm.com"><img alt="speedup" src="https://img.shields.io/badge/end--to--end-5.22x-2ea44f"></a>
+    <a href="https://github.com/facebookresearch/dinov2/commit/7764ea0f912e53c92e82eb78a2a1631e92725fc8"><img alt="base" src="https://img.shields.io/badge/upstream-7764ea0f912e-blue"></a>
+    <img alt="card" src="https://img.shields.io/badge/measured%20on-RTX%204090%20D-lightgrey">
+  </p>
+</div>
+
+> This is a fork of [facebookresearch/dinov2](https://github.com/facebookresearch/dinov2) at commit
+> [`7764ea0f912e`](https://github.com/facebookresearch/dinov2/commit/7764ea0f912e53c92e82eb78a2a1631e92725fc8).
+> **What is measured here is an inference program, not upstream library code**: `bench_dino.py`
+> does not exist upstream. It builds DINOv2 ViT-L/14 from this repository's own `hubconf.py`
+> (`torch.hub.load(".", "dinov2_vitl14", source="local", pretrained=False)`: random weights, seed 0,
+> nothing downloaded) and runs 50 inference forwards over one random 16×3×518×518 batch on the GPU.
+> The commit on top of upstream adds that program in its optimized form; the diff against its own
+> unoptimized version is kept verbatim at [`.autooptm/autooptm.patch`](.autooptm/autooptm.patch).
+> The patch changes `bench_dino.py` only. Everything under `dinov2/` is upstream, untouched.
+
+## The result
+
+| | |
+|---|---|
+| **Command** | `python bench_dino.py` |
+| **Entry point** | `bench_dino.py` (added by this fork) |
+| **Unit measured** | one inference forward of DINOv2 ViT-L/14 over a 16×3×518×518 batch (the program's loop runs 50 of them) |
+| **Before (stock program)** | 543 ms per unit (26.16 s for the timed loop after a 5-forward warm-up) |
+| **After (this tree, all switches default ON)** | 103 ms per unit (5.01 s for the timed loop; the 5-forward warm-up takes ~4.8 s once when the process starts, 1.2 s for stock, and is not included) |
+| **Speedup** | **5.22x** end to end on RTX 4090 D, noise floor of the host 0.43% |
+| **Output** | the model's output features within cosine 0.99998 and relative L2 0.0065 of the stock program's (worst 1% of elements trimmed; max absolute difference 0.032 untrimmed); verified on the pinned inputs and on a held-out set the optimiser never saw (cosine 0.99998, relative L2 0.0064) |
+
+### What changed
+
+| File | Where | Gain |
+|---|---|---|
+| `bench_dino.py` | model and input setup | 3.75x |
+| `bench_dino.py` | module top | 1.29x |
+| `bench_dino.py` | `dinov2.layers.block.Block.forward`, set from the program at load time (the library file is not edited) | 1.05x |
+
+Each gain is measured on top of the rows above it. Every change sits behind a switch at the top of
+`bench_dino.py`, default ON; turning all three off runs the stock program.
+
+## Reproduce
+
+```bash
+git clone https://github.com/autooptm/dinov2-ao.git
+cd dinov2-ao
+# install PyTorch with CUDA as upstream documents, then:
+python bench_dino.py
+```
+
+The diff against upstream is one commit: `git log -1 -p` shows it. It adds the program only;
+`.autooptm/autooptm.patch` is that program's optimization diff against its own stock form.
+
+---
+
+<div align="center"><sub>Optimized by <a href="https://autooptm.com">AutoOptm</a> — point it at a repository, get back a verified speedup and the patch.</sub></div>
+
+---
+
 :new: [2025-12-18] *Added support for loading XRay-DINO backbone following [Advancing human-centric AI for robust X-ray analysis through holistic self-supervised learning](https://arxiv.org/pdf/2405.01469), more details are [here](#pretrained-backbone-xray-dino)*
 
 :new: [2025-12-16] *Added Channel-Adaptive DINO code following [Scaling Channel-Adaptive Self-Supervised Learning](https://openreview.net/forum?id=pT8sgtRVAf), more details are [here](#dinov2-for-biology)*

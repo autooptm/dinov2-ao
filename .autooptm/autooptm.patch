@@ -1,0 +1,32 @@
+diff --git a/bench_dino.py b/bench_dino.py
+index 4ff23d8b24413d80d18d85e014e5b05396041388..0cbc008b52279accab45ad741baabaab9fa5456c 100644
+--- a/bench_dino.py
++++ b/bench_dino.py
+@@ -1,12 +1,27 @@
++import os
++
+ import torch
+ torch.manual_seed(0)                       # reproducible outputs for the before/after comparison
+ 
++OPT_1 = os.environ.get("DINO_OPT_1", "1") == "1"
++OPT_2 = os.environ.get("DINO_OPT_2", "1") == "1"
++OPT_3 = os.environ.get("DINO_OPT_3", "1") == "1"
++
++if OPT_2 and hasattr(torch.backends.cuda.matmul, "allow_fp16_accumulation"):
++    torch.backends.cuda.matmul.allow_fp16_accumulation = True
++if OPT_3:
++    from dinov2.layers.block import Block
++    Block.forward = torch.compile(Block.forward)
++
+ # Load from the local checkout, so this repository's code is what runs.
+ # pretrained=False: random weights, nothing is downloaded; speed does not depend
+ # on the weight values, so timing and the before/after comparison are unaffected.
+ model = torch.hub.load(".", "dinov2_vitl14", source="local", pretrained=False).cuda().eval()
+ 
+ x = torch.randn(16, 3, 518, 518, device="cuda")   # one batch of images, the inference input
++if OPT_1:
++    model = model.half()
++    x = x.half()
+ with torch.inference_mode():                       # inference only, no gradients
+     for _ in range(50):                            # the loop amortises model build / import start-up
+         feats = model(x)
